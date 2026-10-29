@@ -6,9 +6,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 20}
+        with:
+          node-version: 20
       - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: 17}
+        with:
+          distribution: temurin
+          java-version: 17
       - run: npm install
       - run: mkdir -p www/vendor www/icons
       - run: cp index.html style.css app.js data.js manifest.json sw.js www/
@@ -20,3 +23,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: MLC-Outreach-APK
+          path: android/app/build/outputs/apk/debug/*.apk
