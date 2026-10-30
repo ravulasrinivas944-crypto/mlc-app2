@@ -13,10 +13,8 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: npm install
-      - run: mkdir -p www/vendor www/icons
-      - run: cp index.html style.css app.js data.js manifest.json sw.js www/
-      - run: cp react.production.min.js react-dom.production.min.js htm.umd.js www/vendor/
-      - run: cp icon-192.png icon-512.png www/icons/
+      - run: mkdir www
+      - run: cp -r index.html style.css app.js data.js manifest.json sw.js vendor icons www/
       - run: npx cap add android
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug

@@ -30,22 +30,22 @@ const HM={ward:'ward',name:'name',reltype:'relType',relationtype:'relType',relna
 const csvOut=l=>['ward,name,relType,relName,house,street,phone,village,age'].concat(l.map(m=>[m.ward,m.name,m.relType,m.relName,m.house,m.street,m.phone,m.village,m.age||''].map(x=>'"'+String(x||'').replace(/"/g,'""')+'"').join(','))).join('\n');
 
 /* ============ COMPONENTS ============ */
-const Head=({title,onBack,right})=>html`<header>${onBack&&html`<button onClick=${onBack} aria-label="Back">←</button>`}<span style=${{flex:1}}>${title}</span>${right}</header>`;
-const SearchBar=({value,onChange,ph,inputRef})=>html`<input ref=${inputRef} type="search" value=${value} onChange=${e=>onChange(e.target.value)} placeholder=${ph} aria-label=${ph} style=${{borderRadius:99,marginBottom:10}}/>`;
+const Head=({title,onBack,onMenu,right,more,menuEl})=>html`<header>${onBack?html`<button onClick=${onBack} aria-label="Back">←</button>`:html`<button onClick=${onMenu} aria-label="Settings">☰</button>`}<span style=${{flex:1}}>${title}</span>${right}${more&&html`<button onClick=${more} aria-label="More">⋮</button>`}${menuEl}</header>`;
+const SearchBar=({value,onChange,ph,inputRef,onMic})=>html`<div className="sb"><span className="sbi">🔍</span><input ref=${inputRef} type="search" value=${value} onChange=${e=>onChange(e.target.value)} placeholder=${ph} aria-label=${ph}/>${onMic&&html`<button className="mic" onClick=${onMic} aria-label="Voice search">🎤</button>`}</div>`;
 const WardBadge=({w})=>html`<span className=${'badge'+(w==='mixed'?' mx':'')}>${LBL(w)}</span>`;
-const WardTile=({w,n,onClick})=>html`<button className=${'tile'+(w==='mixed'?' mix':'')} onClick=${onClick}>${w==='mixed'?html`<b>Mixed Data</b>`:html`<b>${w}</b><small>Ward</small>`}<small>${n} ${n===1?'record':'records'}</small></button>`;
+const WardTile=({w,onClick})=>html`<button className=${'tile'+(w==='mixed'?' mix':'')} onClick=${onClick}>${w==='mixed'?html`<b>Mixed<br/>Data</b>`:html`<b>${w}</b><small>Ward</small>`}</button>`;
 function Field({label,req,err,children}){return html`<label className="f"><span>${label}${req?' *':''}</span>${children}${err&&html`<em>${err}</em>`}</label>`}
-
-function MemberCard({m,showWard,onWa,onSms,onEdit,onDel,msgText}){
-  const[ask,setAsk]=useState(false); const has=validPhone(m.phone); const body=encodeURIComponent(fill(msgText,m));
-  return html`<div className="mem"><h4><span>${m.name}</span><span className="row" style=${{flex:'none'}}>${m.review&&html`<span className="badge sm">REVIEW</span>`}${showWard&&html`<${WardBadge} w=${m.ward}/>`}</span></h4>
-   <div className="kv">${relText(m)&&html`<span>Relation</span><span>${relText(m)}</span>`}${m.house&&html`<span>Address</span><span>${m.house}</span>`}${m.street&&html`<span>Street/Area</span><span>${m.street}</span>`}${m.village&&html`<span>Village/Town</span><span>${m.village}</span>`}${m.age&&html`<span>Age</span><span>${m.age}</span>`}${m.review&&html`<span>To check</span><span>${m.review}</span>`}${m.phone&&html`<span>Phone</span><span>${m.phone}${has?'':' (invalid number, buttons off)'}</span>`}</div>
-   <div className="acts"><a className=${'btn fill'+(has?'':' off')} href=${has?`https://wa.me/${waNum(m.phone)}?text=${body}`:undefined} target="_blank" rel="noopener" onClick=${e=>onWa(e,m)}>💬 WhatsApp</a>
-    <a className=${'btn'+(has?'':' off')} href=${has?`sms:${ten(m.phone)}?body=${body}`:undefined} onClick=${e=>onSms(e,m)}>✉ SMS</a>
-    <a className=${'btn'+(has?'':' off')} href=${has?`tel:${ten(m.phone)}`:undefined}>📞 Call</a></div>
-   <div className="row" style=${{marginTop:8,justifyContent:'flex-end'}}><button className="btn" style=${{flex:'none',padding:'4px 10px',fontSize:13}} onClick=${()=>onEdit(m)}>Edit</button>
-    <button className=${'btn'+(ask?' fill':'')} style=${{flex:'none',padding:'4px 10px',fontSize:13}} onClick=${()=>ask?onDel(m):setAsk(true)} onBlur=${()=>setAsk(false)}>${ask?'Tap again to delete':'Delete'}</button></div></div>`;
-}
+const rows=m=>[['Relation',relText(m)],['Address',m.house],['Street/Area',m.street],['Village/Town',m.village],['Age',m.age],['Phone',m.phone],['To check',m.review]].filter(r=>r[1]);
+function Acts({m,msgText,onWa,onSms,big}){const has=validPhone(m.phone);const body=encodeURIComponent(fill(msgText,m));
+  return html`<div className=${'acts'+(big?' big':'')}><a className=${'btn fill'+(has?'':' off')} href=${has?`https://wa.me/${waNum(m.phone)}?text=${body}`:undefined} target="_blank" rel="noopener" onClick=${e=>onWa(e,m)}>💬 WhatsApp</a>
+   <a className=${'btn'+(has?'':' off')} href=${has?`sms:${ten(m.phone)}?body=${body}`:undefined} onClick=${e=>onSms(e,m)}>✉ SMS</a>
+   <a className=${'btn'+(has?'':' off')} href=${has?`tel:${ten(m.phone)}`:undefined}>📞 Call</a></div>`}
+const MemberCard=({m,showWard,onOpen,...p})=>html`<div className="mem"><h4 onClick=${()=>onOpen(m)}><span>${m.name}</span><span className="row" style=${{flex:'none'}}>${m.review&&html`<span className="badge sm">REVIEW</span>`}${showWard&&html`<${WardBadge} w=${m.ward}/>`}</span></h4>
+  <div className="kv" onClick=${()=>onOpen(m)}>${rows(m).map(([k,v])=>html`<${React.Fragment} key=${k}><span>${k}</span><span>: ${v}</span><//>`)}</div><${Acts} m=${m} ...${p}/></div>`;
+function Detail({m,...p}){const ic={Relation:'👪',Address:'🏠','Street/Area':'📍','Village/Town':'🏘',Age:'🎂',Phone:'📞','To check':'⚠️'};
+  return html`<div className="pad"><div className="dcard"><div className="avatar">👤</div><h2>${m.name}</h2><${WardBadge} w=${m.ward}/>
+   <div className="drows">${rows(m).map(([k,v])=>html`<div key=${k} className="drow"><span>${ic[k]}</span><span className="dk">${k}</span><span>: ${v}</span></div>`)}</div></div><${Acts} big m=${m} ...${p}/></div>`}
+const Sky=()=>html`<svg className="sky" viewBox="0 0 400 90" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><g fill="#f7b6d2"><rect x="0" y="60" width="40" height="30"/><rect x="45" y="45" width="30" height="45"/><rect x="80" y="55" width="35" height="35"/><path d="M130 90V50a30 30 0 0 1 60 0v40z"/><rect x="140" y="20" width="6" height="30"/><rect x="174" y="20" width="6" height="30"/><rect x="200" y="50" width="35" height="40"/><rect x="240" y="35" width="28" height="55"/><rect x="272" y="58" width="40" height="32"/><path d="M320 90V60a22 22 0 0 1 44 0v30z"/><rect x="368" y="50" width="32" height="40"/></g></svg>`;
 
 function MemberForm({init,members,onSave,onCancel}){
   const[f,setF]=useState(init||{ward:'',name:'',relType:'F',relName:'',house:'',street:'',phone:'',village:'Nalgonda'});
@@ -92,20 +92,21 @@ function Settings({members,addMany,reset}){
 function App(){
   const[boot,setBoot]=useState(true);const[scr,setScr]=useState('home');const[ward,setWard]=useState('');
   const[q,setQ]=useState('');const[wq,setWq]=useState('');const[edit,setEdit]=useState(null);const[toast,setToast]=useState(null);
+  const[noImg,setNoImg]=useState(false);const[sel,setSel]=useState(null);const[bk,setBk]=useState('home');const[menu,setMenu]=useState(false);
   const[ul,setUl]=usePersist('mlc_user_v2',{add:[],edit:{},del:[]});const[lim,setLim]=useState(150);
   const members=useMemo(()=>{const d=new Set(ul.del);return BASE.filter(m=>!d.has(m.id)).map(m=>ul.edit[m.id]||m).concat(ul.add).sort(cmp)},[ul]);
-  const counts=useMemo(()=>{const c={};members.forEach(m=>{c[m.ward]=(c[m.ward]||0)+1});return c},[members]);
   const upsert=m=>setUl(u=>m.id[0]==='b'?{...u,edit:{...u.edit,[m.id]:m}}:{...u,add:u.add.some(x=>x.id===m.id)?u.add.map(x=>x.id===m.id?m:x):[m,...u.add]});
   const remove=id=>setUl(u=>id[0]==='b'?{...u,del:[...u.del,id]}:{...u,add:u.add.filter(x=>x.id!==id)});
   const addMany=l=>setUl(u=>({...u,add:[...l,...u.add]}));const[msg,setMsg]=usePersist('mlc_msg_v1',{text:'',saved:false});
   const[draft,setDraft]=useState(msg.text);const[editing,setEditing]=useState(!msg.saved);
   const[photo,setPhoto]=useState(()=>{try{return localStorage.getItem('mlc_photo_v1')||''}catch(e){return ''}});
-  const ta=useRef(),sr=useRef();
-  useEffect(()=>{const t=setTimeout(()=>setBoot(false),1600);return()=>clearTimeout(t)},[]);
+  const ta=useRef(),sr=useRef(),wsr=useRef();
+  useEffect(()=>{const t=setTimeout(()=>setBoot(false),2200);return()=>clearTimeout(t)},[]);
   useEffect(()=>{try{photo?localStorage.setItem('mlc_photo_v1',photo):localStorage.removeItem('mlc_photo_v1')}catch(e){}},[photo]);
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(null),9000);return()=>clearTimeout(t)}},[toast]);
-  const go=(s,w)=>{setScr(s);if(w!==undefined)setWard(w);setWq('');setLim(150);window.scrollTo(0,0)};
-  const sample0=SAMPLE0;
+  const go=(s,w)=>{setScr(s);setMenu(false);if(w!==undefined)setWard(w);setWq('');setLim(150);window.scrollTo(0,0)};
+  const open=m=>{setBk(scr);setSel(m.id);setScr('detail');setMenu(false);window.scrollTo(0,0)};
+  const cur=members.find(m=>m.id===sel);
   const saved=msg.saved?msg.text:'';
   function insert(k){const el=ta.current;const tag='{'+k+'}';if(!el){setDraft(draft+tag);return}const a=el.selectionStart,b=el.selectionEnd;setDraft(draft.slice(0,a)+tag+draft.slice(b));setTimeout(()=>{el.focus();el.selectionStart=el.selectionEnd=a+tag.length},0)}
   const notify=(m,note)=>setToast({text:fill(saved,m)||'(No common message saved. The chat will open without text.)',to:m.name,note});
@@ -117,34 +118,40 @@ function App(){
     window.open(url,'_blank','noopener');notify(m,'The photo could not be attached from here. WhatsApp opened with the text only. Attach the photo yourself in the chat.')}
   const onSms=(e,m)=>notify(m,'Opening your SMS app with the text filled in.');
   function pick(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>setPhoto(r.result);r.readAsDataURL(f);e.target.value=''}
+  function mic(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){setToast({text:'Voice search is not supported on this device.'});return}const r=new R();r.lang='en-IN';r.onresult=e=>setQ(e.results[0][0].transcript);r.start()}
   function save(m){const ex=members.some(x=>x.id===m.id);upsert({...m,_h:null});setEdit(null);setToast({text:(ex?'Updated ':'Added ')+m.name+' in '+LBL(m.ward)+'.'});go('ward',m.ward)}
-  const card=(m,sw)=>html`<${MemberCard} key=${m.id} m=${m} showWard=${sw} msgText=${saved} onWa=${onWa} onSms=${onSms} onEdit=${m=>{setEdit(m);setScr('form')}} onDel=${m=>remove(m.id)}/>`;
+  const common={msgText:saved,onWa,onSms,onOpen:open};
+  const card=(m,sw)=>html`<${MemberCard} key=${m.id} m=${m} showWard=${sw} ...${common}/>`;
 
-  if(boot)return html`<div className="splash"><h1>MLC<br/>Ward-wise List</h1><p>Shri Kancharla Bhupal Reddy</p><div className="spin" role="status" aria-label="Loading"></div></div>`;
+  if(boot)return noImg?html`<div className="splash"><img className="sp-photo" src="icons/splash.png" alt="" onError=${e=>{e.target.style.display='none'}}/><h1>MLC<br/>WARD-WISE LIST</h1><div className="dv"><i></i><b></b><i></i></div><p>Shri Kancharla Bhupal Reddy</p><small>Nalgonda</small><div className="spin" role="status" aria-label="Loading"></div><${Sky}/></div>`:html`<div className="splash-full"><img src="icons/splash.png" alt="MLC Ward-wise List" onError=${()=>setNoImg(true)}/></div>`;
   const hits=q.trim()?members.filter(m=>hay(m).includes(q.trim().toLowerCase())):[];
   const list=scr==='ward'?members.filter(m=>m.ward===ward&&(!wq.trim()||hay(m).includes(wq.trim().toLowerCase()))):members.filter(m=>!wq.trim()||hay(m).includes(wq.trim().toLowerCase()));
-  const pv=fill(draft,sample0), unk=unknown(draft);
+  const sample0=SAMPLE0,pv=fill(draft,sample0),unk=unknown(draft);
   let body;
   if(scr==='home')body=html`<div className="pad">
-    <div className="card"><h3>💬 Common Message</h3><p className="mut">Type {name} where each member’s name should go. It is replaced when you tap WhatsApp or SMS.</p>
-     ${editing?html`<textarea ref=${ta} value=${draft} onChange=${e=>setDraft(e.target.value)} placeholder="e.g. Namaste {name} garu, ..."/>
+    <div className="card"><div className="ch"><span className="ci">💬</span><div><h3>Common Message</h3><p className="mut">Type a message to share with members. Use {name} for each member’s name.</p></div></div>
+     ${editing?html`<textarea ref=${ta} value=${draft} onChange=${e=>setDraft(e.target.value)} placeholder="Type your message here..."/>
       <div className="chips">${KEYS.map(k=>html`<button key=${k} className="chip" onClick=${()=>insert(k)}>{${k}}</button>`)}</div>
       <div className="row"><button className="btn fill" onClick=${()=>{setMsg({text:draft,saved:true});setEditing(false)}}>Save</button><button className="btn" onClick=${()=>setDraft('')}>Clear</button></div>`
      :html`<div className="prev">${msg.text||'No message saved.'}</div><div className="row" style=${{marginTop:8}}><button className="btn" onClick=${()=>{setDraft(msg.text);setEditing(true)}}>Edit</button><button className="btn" onClick=${()=>{setMsg({text:'',saved:false});setDraft('');setEditing(true)}}>Clear</button></div>`}
      <p className="mut" style=${{marginTop:10,marginBottom:2}}>Preview for ${sample0.name}:</p><div className="prev">${(editing?pv:fill(msg.text,sample0))||'Nothing to preview yet.'}</div>
      ${editing&&unk.length>0&&html`<p className="mut" style=${{color:'#d11'}}>Unknown placeholder${unk.length>1?'s':''}: ${unk.map(u=>'{'+u+'}').join(', ')}. They will be sent as typed.</p>`}</div>
-    <div className="card"><h3>🖼 WhatsApp Photo</h3><p className="mut">Optional. On phones that support sharing, the photo and text go to the share sheet. The photo cannot be attached to a WhatsApp link automatically.</p>
-     <div className="row">${photo&&html`<img src=${photo} alt="Selected photo" style=${{width:72,height:72,objectFit:'cover',borderRadius:12,flex:'none'}}/>`}
-     <label className="btn" style=${{cursor:'pointer'}}>${photo?'Replace Photo':'Choose Photo'}<input type="file" accept="image/*" onChange=${pick} hidden/></label>${photo&&html`<button className="btn" onClick=${()=>setPhoto('')}>Remove Photo</button>`}</div></div>
-    <${SearchBar} inputRef=${sr} value=${q} onChange=${setQ} ph="Search name, relation, address, street, phone"/>
-    ${q.trim()?(hits.length?html`<div>${hits.length>100&&html`<p className="mut">Showing the first 100 of ${hits.length} matches. Type more to narrow down.</p>`}${hits.slice(0,100).map(m=>html`<button key=${m.id} className="res" onClick=${()=>{setQ('');setWard(m.ward);setScr('ward');setWq(m.name)}}><span><b>${m.name}</b><br/><span className="mut">${[relText(m),m.street,m.phone].filter(Boolean).join(' | ')}</span></span><${WardBadge} w=${m.ward}/></button>`)}</div>`:html`<div className="empty">No members match “${q}”.</div>`)
-     :html`<div className="grid">${WARDS.map(w=>html`<${WardTile} key=${w} w=${w} n=${counts[w]||0} onClick=${()=>go('ward',w)}/>`)}<${WardTile} w="mixed" n=${counts.mixed||0} onClick=${()=>go('ward','mixed')}/></div>`}</div>`;
-  else if(scr==='ward'||scr==='all')body=html`<div className="pad"><${SearchBar} value=${wq} onChange=${setWq} ph=${scr==='ward'?'Search in '+LBL(ward):'Search all members'}/><p className="mut">Total members: ${list.length}</p>
+    <div className="card"><div className="ch"><span className="ci">🖼</span><div><h3>WhatsApp Photo</h3><p className="mut">Optional attachment for WhatsApp</p></div></div>
+     <div className="row">${photo&&html`<img className="thumb" src=${photo} alt="Selected photo"/>`}
+     <label className="btn" style=${{cursor:'pointer'}}>🖼 ${photo?'Replace Photo':'Choose Photo'}<input type="file" accept="image/*" onChange=${pick} hidden/></label>${photo&&html`<button className="btn" onClick=${()=>setPhoto('')}>Remove</button>`}</div></div>
+    <${SearchBar} inputRef=${sr} value=${q} onChange=${setQ} ph="Search members across all wards..." onMic=${mic}/>
+    ${q.trim()?(hits.length?html`<div>${hits.length>100&&html`<p className="mut">Showing the first 100 of ${hits.length} matches. Type more to narrow down.</p>`}${hits.slice(0,100).map(m=>html`<button key=${m.id} className="res" onClick=${()=>{setQ('');open(m)}}><span className="av">👤</span><span style=${{flex:1}}><b>${m.name}</b><br/><span className="mut">${[relText(m),m.street,m.phone].filter(Boolean).join(' | ')}</span></span><${WardBadge} w=${m.ward}/><span className="chev">›</span></button>`)}</div>`:html`<div className="empty">No members found.</div>`)
+     :html`<div className="grid">${WARDS.map(w=>html`<${WardTile} key=${w} w=${w} onClick=${()=>go('ward',w)}/>`)}<${WardTile} w="mixed" onClick=${()=>go('ward','mixed')}/></div>`}</div>`;
+  else if(scr==='ward'||scr==='all')body=html`<div className="pad"><${SearchBar} inputRef=${wsr} value=${wq} onChange=${setWq} ph=${scr==='ward'?'Search in '+LBL(ward)+'...':'Search all members...'}/><p className="mut">Total Members: ${list.length}</p>
     ${list.length?list.slice(0,lim).map(m=>card(m,scr==='all')):html`<div className="empty">${scr==='ward'&&!members.some(m=>m.ward===ward)?LBL(ward)+' has no records yet. Tap + to add the first member.':'No members found.'}</div>`}${list.length>lim&&html`<button className="btn" style=${{width:'100%'}} onClick=${()=>setLim(lim+150)}>Show more (${list.length-lim} left)</button>`}</div>`;
-  else if(scr==='form')body=html`<${MemberForm} init=${edit||{ward:ward&&scr!=='home'?ward:'',name:'',relType:'F',relName:'',house:'',street:'',phone:'',village:'Nalgonda'}} members=${members} onSave=${save} onCancel=${()=>{setEdit(null);go(ward?'ward':'home')}}/>`;
+  else if(scr==='detail'&&cur)body=html`<${Detail} m=${cur} msgText=${saved} onWa=${onWa} onSms=${onSms}/>`;
+  else if(scr==='form')body=html`<${MemberForm} init=${edit||{ward:ward?ward:'',name:'',relType:'F',relName:'',house:'',street:'',phone:'',village:'Nalgonda'}} members=${members} onSave=${save} onCancel=${()=>{setEdit(null);go(ward?'ward':'home')}}/>`;
   else body=html`<${Settings} members=${members} addMany=${addMany} reset=${()=>setUl({add:[],edit:{},del:[]})}/>`;
-  const title=scr==='home'?'MLC Ward-wise List':scr==='ward'?LBL(ward):scr==='all'?'All Members':scr==='form'?(edit?'Edit Member':'Add Member'):'Settings';
-  return html`<div className="app"><${Head} title=${title} onBack=${scr!=='home'?()=>go(scr==='ward'?'home':scr==='form'&&ward?'ward':'home'):null}/>${body}
+  const title=scr==='home'?'MLC Ward-wise List':scr==='ward'?LBL(ward):scr==='all'?'All Members':scr==='detail'?'Member Details':scr==='form'?(edit?'Edit Member':'Add Member'):'Settings';
+  const items=scr==='home'?[['Settings',()=>go('settings')],['All Members',()=>go('all')]]:scr==='ward'?[['Add member here',()=>{setEdit(null);setScr('form')}]]:scr==='detail'&&cur?[['Edit',()=>{setEdit(cur);setScr('form')}],['Delete',()=>{if(confirm('Delete '+cur.name+'?')){remove(cur.id);setScr(bk)}}]]:[];
+  const menuEl=menu&&items.length>0&&html`<div className="menu">${items.map(([l,f])=>html`<button key=${l} onClick=${()=>{setMenu(false);f()}}>${l}</button>`)}</div>`;
+  const back=scr==='home'?null:()=>{scr==='detail'?setScr(bk):go(scr==='form'&&ward?'ward':'home')};
+  return html`<div className="app"><${Head} title=${title} onBack=${back} onMenu=${()=>go('settings')} menuEl=${menuEl} more=${items.length?()=>setMenu(!menu):null} right=${scr==='ward'?html`<button onClick=${()=>wsr.current&&wsr.current.focus()} aria-label="Search">🔍</button>`:null}/>${body}
    ${toast&&html`<div className="toast" onClick=${()=>setToast(null)} role="status">${toast.to&&html`<b>Message for ${toast.to}:</b><br/>`}${toast.text}${toast.note&&html`<small>${toast.note}</small>`}</div>`}
    <nav><button className=${scr==='home'?'on':''} onClick=${()=>go('home')}><span className="ic">🏠</span>Home</button>
     <button onClick=${()=>{go('home');setTimeout(()=>sr.current&&sr.current.focus(),50)}}><span className="ic">🔍</span>Search</button>
