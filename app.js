@@ -84,7 +84,7 @@ function Settings({members,addMany,reset}){
    ${info&&html`<p className="mut">${info}</p>`}${out&&html`<textarea readOnly value=${out} style=${{marginTop:8}}/>`}</div>
    <div className="card"><h3>Data management</h3><p className="mut">The Excel records (Wards 3 to 48, including 17 and 36) and the extra Nalgonda people from the PDF (Mixed Data) are built in. Your additions, edits and deletions are saved in this browser when storage is available and may reset if browser data is cleared. Rows marked REVIEW have an uncertain Nalgonda spelling.</p>
     <div className="row"><button className="btn" onClick=${reset}>Undo all my additions, edits and deletions</button></div></div>
-   <div className="card"><h3>Updating member data</h3><p className="mut">Send the missing records (Wards 1, 2, 22) to Claude as CSV or Excel and ask it to update this app. Use {name} in the common message to insert each member’s name when sending.</p></div>
+   <div className="card"><h3>Updating member data</h3><p className="mut">Add missing records with the + button or import a CSV above. Use {name} in the common message to insert each member’s name when sending.</p></div>
    <div className="card"><h3>Records per ward (${members.length} total)</h3><table><tbody>${WARDS.concat('mixed').map(w=>html`<tr key=${w}><td>${LBL(w)}</td><td>${cnt(w)}</td></tr>`)}</tbody></table></div></div>`;
 }
 
