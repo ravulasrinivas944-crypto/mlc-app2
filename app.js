@@ -142,11 +142,13 @@ function App(){
   async function onWa(e,m){
     if(!photo){notify(m,'Opening WhatsApp. Review the message, then send it yourself.');return}
     e.preventDefault();const text=fill(saved,m);const url=`https://wa.me/${waNum(m.phone)}?text=${encodeURIComponent(text)}`;
+    const nat=window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()&&window.Capacitor.Plugins&&window.Capacitor.Plugins.WaShare;
+    if(nat){try{await nat.send({phone:waNum(m.phone),text,image:photo.split(',')[1],mime:'image/jpeg'});notify(m,'WhatsApp opened with the photo and message. Press Send yourself.');return}catch(x){if(String((x&&x.message)||x).includes('WHATSAPP_NOT_INSTALLED')){setToast({text:'WhatsApp is not installed on this phone.'});return}}}
     try{const b=await(await fetch(photo)).blob();const f=new File([b],'photo.'+(b.type.split('/')[1]||'jpg'),{type:b.type});
       if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],text});notify(m,'Choose WhatsApp in the share sheet and pick the contact. Nothing is sent automatically.');return}}catch(x){}
     window.open(url,'_blank','noopener');notify(m,'The photo could not be attached from here. WhatsApp opened with the text only. Attach the photo yourself in the chat.')}
   const onSms=(e,m)=>notify(m,'Opening your SMS app with the text filled in.');
-  function pick(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>setPhoto(r.result);r.readAsDataURL(f);e.target.value=''}
+  function pick(e){const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1280/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);setPhoto(c.toDataURL('image/jpeg',.85))};im.onerror=()=>setPhoto(r.result);im.src=r.result};r.readAsDataURL(f)}
   function mic(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){setToast({text:'Voice search is not supported on this device.'});return}const r=new R();r.lang='en-IN';r.onresult=e=>setQ(e.results[0][0].transcript);r.start()}
   async function save(m){const ex=members.some(x=>x.id===m.id);
     const{data,error}=await(ex?sb.from('members').update({...toRow(m),updated_at:new Date().toISOString()}).eq('id',m.id):sb.from('members').insert(toRow(m))).select().single();
