@@ -5,7 +5,16 @@ const WARDS=Array.from({length:48},(_,i)=>String(i+1));
 const LBL=w=>w==='mixed'?'Mixed Data':'Ward '+w;
 const RELS={F:'Father',H:'Husband',M:'Mother',W:'Wife',O:'Other'};
 /* Records: [ward, name, relType, relName, house, street, phone, village, age, reviewNote]. Ward 'mixed' = Mixed Data. Edit this list to update data. */
-const BASE=BASE_RAW.map((r,i)=>({id:'b'+i,ward:r[0],name:r[1],relType:r[2],relName:r[3],house:r[4],street:r[5],phone:r[6],village:r[7],age:r[8]||'',review:r[9]||''})).filter(m=>!DROP.has(m.id));
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+const fromRow=r=>({id:r.id,ward:r.ward,name:r.name,relType:r.rel_type||'',relName:r.rel_name||'',house:r.house||'',street:r.street||'',phone:r.phone||'',village:r.village||'',age:r.age||'',review:r.review||''});
+const toRow=m=>({ward:m.ward,name:m.name,rel_type:m.relType||'',rel_name:m.relName||'',house:m.house||'',street:m.street||'',phone:m.phone||'',village:m.village||'',age:m.age||'',review:m.review||''});
+const idb=(()=>{const open=()=>new Promise((res,rej)=>{const r=indexedDB.open('mlc',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+ return{get:async k=>{try{const d=await open();return await new Promise(res=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(null)})}catch(e){return null}},
+  set:async(k,v)=>{try{const d=await open();await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=res})}catch(e){}}}})();
+async function fetchAll(){const c=await sb.from('members').select('id',{count:'exact',head:true});if(c.error)throw c.error;const n=c.count||0;
+  const pages=await Promise.all(Array.from({length:Math.ceil(n/1000)},(_,i)=>sb.from('members').select('*').order('id').range(i*1000,i*1000+999)));
+  return pages.flatMap(p=>{if(p.error)throw p.error;return p.data}).map(fromRow)}
+const applyChange=(l,p)=>{if(p.eventType==='DELETE')return l.filter(x=>x.id!==p.old.id);const m=fromRow(p.new);return l.some(x=>x.id===m.id)?l.map(x=>x.id===m.id?m:x):[m,...l]};
 const SAMPLE0={name:'Ravi Kumar',relType:'F',relName:'Ramesh',house:'4-2-18',street:'VT Colony',phone:'',village:'Nalgonda',ward:'12'};
 
 /* ============ MESSAGE TEMPLATE: python-style {name} placeholders ============ */
@@ -47,6 +56,16 @@ function Detail({m,...p}){const ic={Relation:'👪',Address:'🏠','Street/Area'
    <div className="drows">${rows(m).map(([k,v])=>html`<div key=${k} className="drow"><span>${ic[k]}</span><span className="dk">${k}</span><span>: ${v}</span></div>`)}</div></div><${Acts} big m=${m} ...${p}/></div>`}
 const Sky=()=>html`<svg className="sky" viewBox="0 0 400 90" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><g fill="#f7b6d2"><rect x="0" y="60" width="40" height="30"/><rect x="45" y="45" width="30" height="45"/><rect x="80" y="55" width="35" height="35"/><path d="M130 90V50a30 30 0 0 1 60 0v40z"/><rect x="140" y="20" width="6" height="30"/><rect x="174" y="20" width="6" height="30"/><rect x="200" y="50" width="35" height="40"/><rect x="240" y="35" width="28" height="55"/><rect x="272" y="58" width="40" height="32"/><path d="M320 90V60a22 22 0 0 1 44 0v30z"/><rect x="368" y="50" width="32" height="40"/></g></svg>`;
 
+function Login(){
+  const[em,setEm]=useState('');const[pw,setPw]=useState('');const[err,setErr]=useState('');const[busy,setBusy]=useState(false);
+  async function go(){if(!em.trim()||!pw){setErr('Enter the email and password.');return}setBusy(true);setErr('');
+    const{error}=await sb.auth.signInWithPassword({email:em.trim(),password:pw});setBusy(false);if(error)setErr(navigator.onLine?'Wrong email or password.':'No internet connection.')}
+  return html`<div className="login"><div className="lcard"><div className="lbadge">MLC</div><h2>Ward-wise List</h2><p className="mut">Sign in with the team email and password.</p>
+   <label className="f"><span>Email</span><input type="email" autoComplete="username" value=${em} onChange=${e=>setEm(e.target.value)}/></label>
+   <label className="f"><span>Password</span><input type="password" autoComplete="current-password" value=${pw} onChange=${e=>setPw(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter')go()}}/></label>
+   ${err&&html`<p className="err" role="alert">${err}</p>`}<button className="btn fill" style=${{width:'100%'}} disabled=${busy} onClick=${go}>${busy?'Signing in...':'Sign in'}</button></div></div>`;
+}
+
 function MemberForm({init,members,onSave,onCancel}){
   const[f,setF]=useState(init||{ward:'',name:'',relType:'F',relName:'',house:'',street:'',phone:'',village:'Nalgonda'});
   const[e,setE]=useState({}); const set=k=>ev=>setF({...f,[k]:ev.target.value});
@@ -67,24 +86,23 @@ function MemberForm({init,members,onSave,onCancel}){
    <div className="row"><button className="btn" onClick=${onCancel}>Cancel</button><button className="btn fill" onClick=${submit}>Save Member</button></div></div>`;
 }
 
-function Settings({members,addMany,reset}){
-  const[csv,setCsv]=useState('');const[out,setOut]=useState('');const[info,setInfo]=useState('');
+function Settings({members,addMany,onLogout}){
+  const[csv,setCsv]=useState('');const[out,setOut]=useState('');const[info,setInfo]=useState('');const[busy,setBusy]=useState(false);
   const cnt=w=>members.filter(m=>m.ward===w).length;
-  function doImport(text){const rows=parseCSV(text);if(rows.length<2){setInfo('No rows found. The first row must be the column names.');return}
+  async function doImport(text){const rows=parseCSV(text);if(rows.length<2){setInfo('No rows found. The first row must be the column names.');return}
     const hd=rows[0].map(h=>HM[h.toLowerCase().replace(/[^a-z]/g,'')]||null);let add=[],dup=0,bad=0,list=members.slice();
     rows.slice(1).forEach((r,i)=>{const m={id:'i'+Date.now()+'-'+i,sample:false,relType:'F',relName:'',house:'',street:'',phone:'',village:'',ward:''};hd.forEach((k,j)=>{if(k)m[k]=(r[j]||'').trim()});
       m.ward=/mixed/i.test(m.ward)?'mixed':String(parseInt(m.ward,10)||'');m.phone=digits(m.phone).slice(-10);
       if(!m.name||!(m.ward==='mixed'||WARDS.includes(m.ward))){bad++;return}
       if(isDup(list,m)){dup++;return}add.push(m);list.push(m)});
-    addMany(add);setInfo(`Imported ${add.length}. Skipped ${dup} duplicates and ${bad} rows with a missing name or invalid ward.`)}
-  return html`<div className="pad"><div className="card"><h3>Add or import member records</h3><p className="mut">Use the + button for one member. To add many, upload a CSV or paste it below. Column names: ward, name, relType, relName, house, street, phone, village. The Excel headers (Ward, House No, Street, Name, Rel Type, Relation Name, Mobile) also work. Use "mixed" as the ward for Mixed Data.</p>
-   <input type="file" accept=".csv,text/csv" onChange=${e=>{const f=e.target.files[0];if(f)f.text().then(doImport)}}/>
+    setBusy(true);try{await addMany(add);setInfo(`Imported ${add.length}. Skipped ${dup} duplicates and ${bad} rows with a missing name or invalid ward.`)}catch(e){setInfo('Import failed: '+(navigator.onLine?e.message:'no internet connection.'))}setBusy(false)}
+  return html`<div className="pad"><div className="card"><h3>Add or import member records</h3><p className="mut">Use the + button for one member. To add many, upload a CSV or paste it below. Column names: ward, name, relType, relName, house, street, phone, village. The Excel headers (Ward, House No, Street, Name, Rel Type, Relation Name, Mobile) also work. Use "mixed" as the ward for Mixed Data. Imported records appear on every team member’s phone.</p>
+   <input type="file" accept=".csv,text/csv" disabled=${busy} onChange=${e=>{const f=e.target.files[0];if(f)f.text().then(doImport)}}/>
    <textarea style=${{marginTop:8}} value=${csv} onChange=${e=>setCsv(e.target.value)} placeholder="Paste CSV text here"/>
-   <div className="row" style=${{marginTop:8}}><button className="btn fill" onClick=${()=>doImport(csv)}>Import pasted CSV</button><button className="btn" onClick=${()=>setOut(csvOut(members))}>Show CSV of all records</button></div>
+   <div className="row" style=${{marginTop:8}}><button className="btn fill" disabled=${busy} onClick=${()=>doImport(csv)}>${busy?'Importing...':'Import pasted CSV'}</button><button className="btn" onClick=${()=>setOut(csvOut(members))}>Show CSV of all records</button></div>
    ${info&&html`<p className="mut">${info}</p>`}${out&&html`<textarea readOnly value=${out} style=${{marginTop:8}}/>`}</div>
-   <div className="card"><h3>Data management</h3><p className="mut">The Excel records (Wards 3 to 48, including 17 and 36) and the extra Nalgonda people from the PDF (Mixed Data) are built in. Your additions, edits and deletions are saved in this browser when storage is available and may reset if browser data is cleared. Rows marked REVIEW have an uncertain Nalgonda spelling.</p>
-    <div className="row"><button className="btn" onClick=${reset}>Undo all my additions, edits and deletions</button></div></div>
-   <div className="card"><h3>Updating member data</h3><p className="mut">Add missing records with the + button or import a CSV above. Use {name} in the common message to insert each member’s name when sending.</p></div>
+   <div className="card"><h3>Live data</h3><p className="mut">Records are stored online and shared with the whole team. Any addition, edit or deletion shows up on every phone within seconds. Saved data stays available to view without internet, but changes need a connection. Rows marked REVIEW have an uncertain Nalgonda spelling or a missing phone number.</p>
+    <div className="row"><button className="btn" onClick=${onLogout}>Log out</button></div></div>
    <div className="card"><h3>Records per ward (${members.length} total)</h3><table><tbody>${WARDS.concat('mixed').map(w=>html`<tr key=${w}><td>${LBL(w)}</td><td>${cnt(w)}</td></tr>`)}</tbody></table></div></div>`;
 }
 
@@ -93,17 +111,28 @@ function App(){
   const[boot,setBoot]=useState(true);const[scr,setScr]=useState('home');const[ward,setWard]=useState('');
   const[q,setQ]=useState('');const[wq,setWq]=useState('');const[edit,setEdit]=useState(null);const[toast,setToast]=useState(null);
   const[noImg,setNoImg]=useState(false);const[sel,setSel]=useState(null);const[bk,setBk]=useState('home');const[menu,setMenu]=useState(false);
-  const[ul,setUl]=usePersist('mlc_user_v2',{add:[],edit:{},del:[]});const[lim,setLim]=useState(150);
-  const members=useMemo(()=>{const d=new Set(ul.del);return BASE.filter(m=>!d.has(m.id)).map(m=>ul.edit[m.id]||m).concat(ul.add).sort(cmp)},[ul]);
-  const upsert=m=>setUl(u=>m.id[0]==='b'?{...u,edit:{...u.edit,[m.id]:m}}:{...u,add:u.add.some(x=>x.id===m.id)?u.add.map(x=>x.id===m.id?m:x):[m,...u.add]});
-  const remove=id=>setUl(u=>id[0]==='b'?{...u,del:[...u.del,id]}:{...u,add:u.add.filter(x=>x.id!==id)});
-  const addMany=l=>setUl(u=>({...u,add:[...l,...u.add]}));const[msg,setMsg]=usePersist('mlc_msg_v1',{text:'',saved:false});
+  const[session,setSession]=useState(undefined);const[cached,setCached]=useState(null);const[raw,setRaw]=useState([]);const[sync,setSync]=useState('');const[lim,setLim]=useState(150);
+  const members=useMemo(()=>raw.slice().sort(cmp),[raw]);
+  const[msg,setMsgL]=usePersist('mlc_msg_v1',{text:'',saved:false});
+  const setMsg=v=>{setMsgL(v);sb.from('app_settings').upsert({key:'common_message',value:v}).then(({error})=>{if(error)setToast({text:'Message saved on this phone only. Check your internet connection.'})})};
+  async function addMany(list){for(let i=0;i<list.length;i+=500){const{data,error}=await sb.from('members').insert(list.slice(i,i+500).map(toRow)).select();if(error)throw error;setRaw(l=>l.concat(data.map(fromRow)))}}
+  async function remove(id){const{error}=await sb.from('members').delete().eq('id',id);if(error){setToast({text:'Could not delete: '+(navigator.onLine?error.message:'no internet connection.')});return false}setRaw(l=>l.filter(x=>x.id!==id));return true}
+  async function logout(){await sb.auth.signOut();await idb.set('members',[]);setRaw([]);setCached(false);go('home')}
+  const uid=session&&session.user.id;
   const[draft,setDraft]=useState(msg.text);const[editing,setEditing]=useState(!msg.saved);
   const[photo,setPhoto]=useState(()=>{try{return localStorage.getItem('mlc_photo_v1')||''}catch(e){return ''}});
   const ta=useRef(),sr=useRef(),wsr=useRef();
   useEffect(()=>{const t=setTimeout(()=>setBoot(false),2200);return()=>clearTimeout(t)},[]);
   useEffect(()=>{try{photo?localStorage.setItem('mlc_photo_v1',photo):localStorage.removeItem('mlc_photo_v1')}catch(e){}},[photo]);
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(null),9000);return()=>clearTimeout(t)}},[toast]);
+  useEffect(()=>{idb.get('members').then(c=>{if(c&&c.length)setRaw(c);setCached(!!(c&&c.length))});sb.auth.getSession().then(({data})=>setSession(data.session||null)).catch(()=>setSession(null));
+    const{data:l}=sb.auth.onAuthStateChange((_e,x)=>setSession(x));return()=>l.subscription.unsubscribe()},[]);
+  useEffect(()=>{if(!uid)return;let ok=true;setSync('Updating...');
+    fetchAll().then(l=>{if(!ok)return;setRaw(l);idb.set('members',l);setSync('')}).catch(()=>{if(ok)setSync('Offline. Showing saved data.')});
+    sb.from('app_settings').select('value').eq('key','common_message').maybeSingle().then(({data})=>{if(ok&&data&&data.value){setMsgL(data.value);setDraft(data.value.text||'');setEditing(!data.value.saved)}});
+    const ch=sb.channel('mlc-live').on('postgres_changes',{event:'*',schema:'public',table:'members'},p=>setRaw(l=>applyChange(l,p))).subscribe();
+    return()=>{ok=false;sb.removeChannel(ch)}},[uid]);
+  useEffect(()=>{if(!raw.length)return;const t=setTimeout(()=>idb.set('members',raw),3000);return()=>clearTimeout(t)},[raw]);
   const go=(s,w)=>{setScr(s);setMenu(false);if(w!==undefined)setWard(w);setWq('');setLim(150);window.scrollTo(0,0)};
   const open=m=>{setBk(scr);setSel(m.id);setScr('detail');setMenu(false);window.scrollTo(0,0)};
   const cur=members.find(m=>m.id===sel);
@@ -119,11 +148,15 @@ function App(){
   const onSms=(e,m)=>notify(m,'Opening your SMS app with the text filled in.');
   function pick(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>setPhoto(r.result);r.readAsDataURL(f);e.target.value=''}
   function mic(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){setToast({text:'Voice search is not supported on this device.'});return}const r=new R();r.lang='en-IN';r.onresult=e=>setQ(e.results[0][0].transcript);r.start()}
-  function save(m){const ex=members.some(x=>x.id===m.id);upsert({...m,_h:null});setEdit(null);setToast({text:(ex?'Updated ':'Added ')+m.name+' in '+LBL(m.ward)+'.'});go('ward',m.ward)}
+  async function save(m){const ex=members.some(x=>x.id===m.id);
+    const{data,error}=await(ex?sb.from('members').update({...toRow(m),updated_at:new Date().toISOString()}).eq('id',m.id):sb.from('members').insert(toRow(m))).select().single();
+    if(error){setToast({text:'Could not save: '+(navigator.onLine?error.message:'no internet connection.')});return}
+    const nm=fromRow(data);setRaw(l=>ex?l.map(x=>x.id===nm.id?nm:x):[nm,...l.filter(x=>x.id!==nm.id)]);setEdit(null);setToast({text:(ex?'Updated ':'Added ')+nm.name+' in '+LBL(nm.ward)+'.'});go('ward',nm.ward)}
   const common={msgText:saved,onWa,onSms,onOpen:open};
   const card=(m,sw)=>html`<${MemberCard} key=${m.id} m=${m} showWard=${sw} ...${common}/>`;
 
-  if(boot)return noImg?html`<div className="splash"><img className="sp-photo" src="icons/splash.png" alt="" onError=${e=>{e.target.style.display='none'}}/><h1>MLC<br/>WARD-WISE LIST</h1><div className="dv"><i></i><b></b><i></i></div><p>Shri Kancharla Bhupal Reddy</p><small>Nalgonda</small><div className="spin" role="status" aria-label="Loading"></div><${Sky}/></div>`:html`<div className="splash-full"><img src="icons/splash.png" alt="MLC Ward-wise List" onError=${()=>setNoImg(true)}/></div>`;
+  if(boot||session===undefined||cached===null)return noImg?html`<div className="splash"><img className="sp-photo" src="icons/splash.png" alt="" onError=${e=>{e.target.style.display='none'}}/><h1>MLC<br/>WARD-WISE LIST</h1><div className="dv"><i></i><b></b><i></i></div><p>Shri Kancharla Bhupal Reddy</p><small>Nalgonda</small><div className="spin" role="status" aria-label="Loading"></div><${Sky}/></div>`:html`<div className="splash-full"><img src="icons/splash.png" alt="MLC Ward-wise List" onError=${()=>setNoImg(true)}/></div>`;
+  if(!session&&!(cached&&!navigator.onLine))return html`<${Login}/>`;
   const hits=q.trim()?members.filter(m=>hay(m).includes(q.trim().toLowerCase())):[];
   const list=scr==='ward'?members.filter(m=>m.ward===ward&&(!wq.trim()||hay(m).includes(wq.trim().toLowerCase()))):members.filter(m=>!wq.trim()||hay(m).includes(wq.trim().toLowerCase()));
   const sample0=SAMPLE0,pv=fill(draft,sample0),unk=unknown(draft);
@@ -146,12 +179,12 @@ function App(){
     ${list.length?list.slice(0,lim).map(m=>card(m,scr==='all')):html`<div className="empty">${scr==='ward'&&!members.some(m=>m.ward===ward)?LBL(ward)+' has no records yet. Tap + to add the first member.':'No members found.'}</div>`}${list.length>lim&&html`<button className="btn" style=${{width:'100%'}} onClick=${()=>setLim(lim+150)}>Show more (${list.length-lim} left)</button>`}</div>`;
   else if(scr==='detail'&&cur)body=html`<${Detail} m=${cur} msgText=${saved} onWa=${onWa} onSms=${onSms}/>`;
   else if(scr==='form')body=html`<${MemberForm} init=${edit||{ward:ward?ward:'',name:'',relType:'F',relName:'',house:'',street:'',phone:'',village:'Nalgonda'}} members=${members} onSave=${save} onCancel=${()=>{setEdit(null);go(ward?'ward':'home')}}/>`;
-  else body=html`<${Settings} members=${members} addMany=${addMany} reset=${()=>setUl({add:[],edit:{},del:[]})}/>`;
+  else body=html`<${Settings} members=${members} addMany=${addMany} onLogout=${logout}/>`;
   const title=scr==='home'?'MLC Ward-wise List':scr==='ward'?LBL(ward):scr==='all'?'All Members':scr==='detail'?'Member Details':scr==='form'?(edit?'Edit Member':'Add Member'):'Settings';
-  const items=scr==='home'?[['Settings',()=>go('settings')],['All Members',()=>go('all')]]:scr==='ward'?[['Add member here',()=>{setEdit(null);setScr('form')}]]:scr==='detail'&&cur?[['Edit',()=>{setEdit(cur);setScr('form')}],['Delete',()=>{if(confirm('Delete '+cur.name+'?')){remove(cur.id);setScr(bk)}}]]:[];
+  const items=scr==='home'?[['Settings',()=>go('settings')],['All Members',()=>go('all')]]:scr==='ward'?[['Add member here',()=>{setEdit(null);setScr('form')}]]:scr==='detail'&&cur?[['Edit',()=>{setEdit(cur);setScr('form')}],['Delete',()=>{if(confirm('Delete '+cur.name+'?')){remove(cur.id).then(ok=>{if(ok)setScr(bk)})}}]]:[];
   const menuEl=menu&&items.length>0&&html`<div className="menu">${items.map(([l,f])=>html`<button key=${l} onClick=${()=>{setMenu(false);f()}}>${l}</button>`)}</div>`;
   const back=scr==='home'?null:()=>{scr==='detail'?setScr(bk):go(scr==='form'&&ward?'ward':'home')};
-  return html`<div className="app"><${Head} title=${title} onBack=${back} onMenu=${()=>go('settings')} menuEl=${menuEl} more=${items.length?()=>setMenu(!menu):null} right=${scr==='ward'?html`<button onClick=${()=>wsr.current&&wsr.current.focus()} aria-label="Search">🔍</button>`:null}/>${body}
+  return html`<div className="app"><${Head} title=${title} onBack=${back} onMenu=${()=>go('settings')} menuEl=${menuEl} more=${items.length?()=>setMenu(!menu):null} right=${scr==='ward'?html`<button onClick=${()=>wsr.current&&wsr.current.focus()} aria-label="Search">🔍</button>`:null}/>${sync&&html`<div className="sync">${sync}</div>`}${body}
    ${toast&&html`<div className="toast" onClick=${()=>setToast(null)} role="status">${toast.to&&html`<b>Message for ${toast.to}:</b><br/>`}${toast.text}${toast.note&&html`<small>${toast.note}</small>`}</div>`}
    <nav><button className=${scr==='home'?'on':''} onClick=${()=>go('home')}><span className="ic">🏠</span>Home</button>
     <button onClick=${()=>{go('home');setTimeout(()=>sr.current&&sr.current.focus(),50)}}><span className="ic">🔍</span>Search</button>

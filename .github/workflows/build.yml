@@ -14,7 +14,7 @@ jobs:
           java-version: 17
       - run: npm install
       - run: mkdir www
-      - run: cp -r index.html style.css app.js data.js manifest.json sw.js vendor icons www/
+      - run: cp -r index.html style.css app.js config.js manifest.json sw.js vendor icons www/
       - run: npx cap add android
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug

@@ -63,3 +63,9 @@ nav .plus{width:56px;height:56px;border-radius:50%;background:var(--p);color:#ff
 table{width:100%;border-collapse:collapse;font-size:14px}td{padding:4px 6px;border-bottom:1px solid var(--line)}td:last-child{text-align:right;font-weight:600}
 .empty{text-align:center;color:var(--mut);padding:30px 10px}
 .splash-full{position:fixed;inset:0;background:#fde0ee;z-index:50}.splash-full img{width:100%;height:100%;object-fit:cover;object-position:center}
+.login{min-height:100vh;display:grid;place-items:center;padding:20px;background:linear-gradient(#ffd6e9,#fff4f9)}
+.lcard{width:min(400px,100%);background:#fff;border:1px solid var(--line);border-radius:20px;padding:24px 20px;text-align:center;box-shadow:0 8px 24px rgba(230,0,115,.15)}
+.lcard .f{text-align:left}.lcard h2{margin:6px 0 4px;color:var(--p)}
+.lbadge{width:64px;height:64px;border-radius:50%;background:var(--p);color:#fff;font-weight:800;display:grid;place-items:center;margin:0 auto}
+.err{color:#d11;font-size:14px;margin:6px 0}
+.sync{background:#fff0a8;color:#5a4a00;text-align:center;padding:6px 10px;font-size:13px}
