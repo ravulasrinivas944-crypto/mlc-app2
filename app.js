@@ -1,5 +1,7 @@
 const {useState,useEffect,useRef,useMemo}=React; const html=htm.bind(React.createElement);
 const ASSET_BASE=window.MLC_ASSET_BASE||'';
+const ADMIN_EMAIL='ravulasrinivas994@gmail.com';
+const ACTIVITY_LABELS={sign_in:'Signed in',member_add:'Added member(s)',member_edit:'Edited member',member_delete:'Deleted member',contact_call:'Call clicked',contact_sms:'SMS clicked',contact_whatsapp:'WhatsApp clicked'};
 
 /* ============ DATA MODEL: {id, ward:'1'..'48'|'mixed', name, relType, relName, house, street, phone, village, age?, sample?} ============ */
 const WARDS=Array.from({length:48},(_,i)=>String(i+1));
@@ -12,6 +14,9 @@ const toRow=m=>({ward:m.ward,name:m.name,rel_type:m.relType||'',rel_name:m.relNa
 const idb=(()=>{const open=()=>new Promise((res,rej)=>{const r=indexedDB.open('mlc',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
  return{get:async k=>{try{const d=await open();return await new Promise(res=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(null)})}catch(e){return null}},
   set:async(k,v)=>{try{const d=await open();await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=res})}catch(e){}}}})();
+async function writeActivity(user,action,count){if(!user||!user.id||!user.email)return{error:new Error('A signed-in user is required to record activity.')};
+  try{return await sb.from('tester_activity').insert({user_id:user.id,user_email:user.email.toLowerCase(),action,record_count:count||1})}
+  catch(error){return{error}}}
 async function fetchAll(){const c=await sb.from('members').select('id',{count:'exact',head:true});if(c.error)throw c.error;const n=c.count||0;
   const pages=await Promise.all(Array.from({length:Math.ceil(n/1000)},(_,i)=>sb.from('members').select('*').order('id').range(i*1000,i*1000+999)));
   return pages.flatMap(p=>{if(p.error)throw p.error;return p.data}).map(fromRow)}
@@ -66,7 +71,8 @@ function Login(){
   return html`<div className="login"><div className="lcard"><div className="lbadge">MLC</div><h2>Ward-wise List</h2><p className="mut">Sign in with the team email and password.</p>
    <label className="f"><span>Email</span><input type="email" autoComplete="username" value=${em} onChange=${e=>setEm(e.target.value)}/></label>
    <label className="f"><span>Password</span><input type="password" autoComplete="current-password" value=${pw} onChange=${e=>setPw(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter')go()}}/></label>
-   ${err&&html`<p className="err" role="alert">${err}</p>`}<button className="btn fill" style=${{width:'100%'}} disabled=${busy} onClick=${go}>${busy?'Signing in...':'Sign in'}</button></div></div>`;
+   ${err&&html`<p className="err" role="alert">${err}</p>`}<button className="btn fill" style=${{width:'100%'}} disabled=${busy} onClick=${go}>${busy?'Signing in...':'Sign in'}</button>
+   <p className="mut activity-disclosure">Tester activity may be logged for ${ADMIN_EMAIL}: sign-ins, member changes, and Call/SMS/WhatsApp clicks. Passwords and message text are not recorded. The dashboard shows 30 days; stored records remain in Supabase until deleted.</p></div></div>`;
 }
 
 function MemberForm({init,members,onSave,onCancel}){
@@ -89,7 +95,31 @@ function MemberForm({init,members,onSave,onCancel}){
    <div className="row"><button className="btn" onClick=${onCancel}>Cancel</button><button className="btn fill" onClick=${submit}>Save Member</button></div></div>`;
 }
 
-function Settings({members,addMany,onLogout}){
+function ActivityDashboard(){const[events,setEvents]=useState([]);const[error,setError]=useState('');const[busy,setBusy]=useState(false);
+  async function refresh(){setBusy(true);setError('');const since=new Date(Date.now()-30*24*60*60*1000).toISOString();
+    try{const{data,error}=await sb.from('tester_activity').select('user_email,action,record_count,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(2000);
+      if(error){setError('Activity log is not ready or could not be loaded. Run supabase/activity-monitoring.sql in Supabase SQL Editor. '+error.message);setBusy(false);return}
+      setEvents(data||[])}catch(error){setError('Could not load tester activity. Check your internet connection and try again. '+(error instanceof Error?error.message:String(error)))}finally{setBusy(false)}}
+  useEffect(()=>{refresh()},[]);
+  const summaries={};events.forEach(event=>{const email=event.user_email;if(!summaries[email])summaries[email]={email,latest:event.created_at,signIns:0,adds:0,edits:0,deletes:0,calls:0,sms:0,whatsapp:0};
+    const summary=summaries[email];if(Date.parse(event.created_at)>Date.parse(summary.latest))summary.latest=event.created_at;
+    if(event.action==='sign_in')summary.signIns++;
+    else if(event.action==='member_add')summary.adds+=event.record_count||1;
+    else if(event.action==='member_edit')summary.edits+=event.record_count||1;
+    else if(event.action==='member_delete')summary.deletes+=event.record_count||1;
+    else if(event.action==='contact_call')summary.calls++;
+    else if(event.action==='contact_sms')summary.sms++;
+    else if(event.action==='contact_whatsapp')summary.whatsapp++});
+  const users=Object.values(summaries).sort((a,b)=>Date.parse(b.latest)-Date.parse(a.latest));
+  return html`<div className="card"><div className="row activity-heading"><div><h3>Tester activity</h3><p className="mut">Last 30 days · action counts only</p></div><button className="btn" disabled=${busy} onClick=${refresh}>${busy?'Loading...':'Refresh'}</button></div>
+    ${error&&html`<p className="err" role="alert">${error}</p>`}
+    ${!error&&!events.length&&!busy&&html`<p className="mut">No activity recorded yet. New sign-ins and actions will appear here after setup.</p>`}
+    ${users.length>0&&html`<div className="activity-table-wrap"><table className="activity-table"><thead><tr><th>Tester</th><th>Last activity</th><th>Sign-ins</th><th>Members added / edited / deleted</th><th>Call / SMS / WhatsApp clicks</th></tr></thead><tbody>${users.map(user=>html`<tr key=${user.email}><td>${user.email}</td><td>${new Date(user.latest).toLocaleString()}</td><td>${user.signIns}</td><td>${user.adds} / ${user.edits} / ${user.deletes}</td><td>${user.calls} / ${user.sms} / ${user.whatsapp}</td></tr>`)}</tbody></table></div>`}
+    ${events.length>0&&html`<details className="activity-recent"><summary>Recent actions (${events.length}${events.length===2000?' shown':''})</summary><div className="activity-table-wrap"><table className="activity-table"><thead><tr><th>Time</th><th>Tester</th><th>Action</th><th>Count</th></tr></thead><tbody>${events.slice(0,100).map((event,i)=>html`<tr key=${event.user_email+event.created_at+i}><td>${new Date(event.created_at).toLocaleString()}</td><td>${event.user_email}</td><td>${ACTIVITY_LABELS[event.action]||event.action}</td><td>${event.record_count||1}</td></tr>`)}</tbody></table></div></details>`}
+    <p className="mut">This audit records account email, timestamps, action type, and member counts only. It never records passwords, member names, or message text.</p>
+  </div>`}
+
+function Settings({members,addMany,onLogout,userEmail,activityIssue}){
   const[csv,setCsv]=useState('');const[out,setOut]=useState('');const[info,setInfo]=useState('');const[busy,setBusy]=useState(false);
   const cnt=w=>members.filter(m=>m.ward===w).length;
   async function doImport(text){const rows=parseCSV(text);if(rows.length<2){setInfo('No rows found. The first row must be the column names.');return}
@@ -105,7 +135,10 @@ function Settings({members,addMany,onLogout}){
    <div className="row" style=${{marginTop:8}}><button className="btn fill" disabled=${busy} onClick=${()=>doImport(csv)}>${busy?'Importing...':'Import pasted CSV'}</button><button className="btn" onClick=${()=>setOut(csvOut(members))}>Show CSV of all records</button></div>
    ${info&&html`<p className="mut">${info}</p>`}${out&&html`<textarea readOnly value=${out} style=${{marginTop:8}}/>`}</div>
    <div className="card"><h3>Live data</h3><p className="mut">Records are stored online and shared with the whole team. Any addition, edit or deletion shows up on every phone within seconds. Saved data stays available to view without internet, but changes need a connection. Rows marked REVIEW have an uncertain Nalgonda spelling or a missing phone number.</p>
-    <div className="row"><button className="btn" onClick=${onLogout}>Log out</button></div></div>
+   ${activityIssue&&html`<p className="err" role="alert">Activity logging could not sync. Contact the administrator to check the Supabase activity-log setup.</p>`}
+   <p className="mut">Tester activity may be logged for ${ADMIN_EMAIL}: sign-ins, member changes, and Call/SMS/WhatsApp button clicks. Passwords and message contents are never logged. The dashboard shows 30 days; stored records remain in Supabase until deleted.</p>
+   <div className="row"><button className="btn" onClick=${onLogout}>Log out</button></div></div>
+   ${userEmail&&userEmail.toLowerCase()===ADMIN_EMAIL&&html`<${ActivityDashboard}/>`}
    <div className="card"><h3>Records per ward (${members.length} total)</h3><table><tbody>${WARDS.concat('mixed').map(w=>html`<tr key=${w}><td>${LBL(w)}</td><td>${cnt(w)}</td></tr>`)}</tbody></table></div></div>`;
 }
 
@@ -114,13 +147,15 @@ function App(){
   const[boot,setBoot]=useState(true);const[scr,setScr]=useState('home');const[ward,setWard]=useState('');
   const[q,setQ]=useState('');const[wq,setWq]=useState('');const[edit,setEdit]=useState(null);const[toast,setToast]=useState(null);
   const[noImg,setNoImg]=useState(false);const[sel,setSel]=useState(null);const[bk,setBk]=useState('home');const[menu,setMenu]=useState(false);
-  const[session,setSession]=useState(undefined);const[cached,setCached]=useState(null);const[raw,setRaw]=useState([]);const[sync,setSync]=useState('');const[lim,setLim]=useState(150);
+  const[session,setSession]=useState(undefined);const[cached,setCached]=useState(null);const[raw,setRaw]=useState([]);const[sync,setSync]=useState('');const[lim,setLim]=useState(150);const[activityIssue,setActivityIssue]=useState(false);
   const members=useMemo(()=>raw.slice().sort(cmp),[raw]);
   const[messageState,setMessageState]=useState({uid:null,msg:{text:'',saved:false},draft:'',editing:true});
   const[contactState,setContactState]=useState({uid:null,statuses:{}});
   const contactWriteQueues=useRef(new Map());
-  async function addMany(list){for(let i=0;i<list.length;i+=500){const{data,error}=await sb.from('members').insert(list.slice(i,i+500).map(toRow)).select();if(error)throw error;setRaw(l=>l.concat(data.map(fromRow)))}}
-  async function remove(id){const{error}=await sb.from('members').delete().eq('id',id);if(error){setToast({text:'Could not delete: '+(navigator.onLine?error.message:'no internet connection.')});return false}setRaw(l=>l.filter(x=>x.id!==id));return true}
+  async function logActivity(action,count){if(!session||!session.user)return;const{error}=await writeActivity(session.user,action,count);
+    if(error){console.error('Tester activity could not be recorded.',error);setActivityIssue(true)}else setActivityIssue(false)}
+  async function addMany(list){for(let i=0;i<list.length;i+=500){const chunk=list.slice(i,i+500);const{data,error}=await sb.from('members').insert(chunk.map(toRow)).select();if(error)throw error;setRaw(l=>l.concat(data.map(fromRow)));await logActivity('member_add',chunk.length)}}
+  async function remove(id){const{error}=await sb.from('members').delete().eq('id',id);if(error){setToast({text:'Could not delete: '+(navigator.onLine?error.message:'no internet connection.')});return false}setRaw(l=>l.filter(x=>x.id!==id));await logActivity('member_delete');return true}
   async function logout(){await sb.auth.signOut();await idb.set('members',[]);setRaw([]);setCached(false);go('home')}
   const uid=session&&session.user.id;
   const contactStatuses=contactState.uid===uid?contactState.statuses:{};
@@ -139,7 +174,7 @@ function App(){
   useEffect(()=>{try{photo?localStorage.setItem('mlc_photo_v1',photo):localStorage.removeItem('mlc_photo_v1')}catch(e){}},[photo]);
   useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(null),9000);return()=>clearTimeout(t)}},[toast]);
   useEffect(()=>{idb.get('members').then(c=>{if(c&&c.length)setRaw(c);setCached(!!(c&&c.length))});sb.auth.getSession().then(({data})=>setSession(data.session||null)).catch(()=>setSession(null));
-    const{data:l}=sb.auth.onAuthStateChange((_e,x)=>setSession(x));return()=>l.subscription.unsubscribe()},[]);
+    const{data:l}=sb.auth.onAuthStateChange((event,x)=>{setSession(x);if(event==='SIGNED_IN'&&x&&x.user)writeActivity(x.user,'sign_in').then(({error})=>{if(error){console.error('Tester sign-in could not be recorded.',error);setActivityIssue(true)}else setActivityIssue(false)})});return()=>l.subscription.unsubscribe()},[]);
   useEffect(()=>{if(!uid){setMsgL({text:'',saved:false});setDraft('');setEditing(true);return}let ok=true;setSync('Updating...');
     const messageKey='mlc_msg_v2_'+uid;
     try{const local=localStorage.getItem(messageKey)||localStorage.getItem('mlc_msg_v1');if(local){const value=JSON.parse(local);if(ok&&value&&typeof value.text==='string'){setMsgL(value);setDraft(value.text);setEditing(!value.saved);localStorage.setItem(messageKey,JSON.stringify(value))}}}catch(e){if(ok)setToast({text:'Could not load your saved message from this phone.'})}
@@ -183,6 +218,7 @@ function App(){
   const saved=msg.saved?msg.text:'';
   function insert(k){const el=ta.current;const tag='{'+k+'}';if(!el){setDraft(draft+tag);return}const a=el.selectionStart,b=el.selectionEnd;setDraft(draft.slice(0,a)+tag+draft.slice(b));setTimeout(()=>{el.focus();el.selectionStart=el.selectionEnd=a+tag.length},0)}
   function recordContact(action,m){if(!uid)return;const value={at:new Date().toISOString()};const localKey='mlc_contact_status_v1_'+uid;
+    logActivity('contact_'+action);
     setContactState(current=>{const statuses={...(current.uid===uid?current.statuses:{})};statuses[m.id]={...(statuses[m.id]||{}),[action]:value};
       try{localStorage.setItem(localKey,JSON.stringify(statuses))}catch(e){setToast({text:'Could not cache this contact status on your phone.'})}return{uid,statuses}});
     const key='contact_status_'+uid+'_'+m.id+'_'+action;const writes=contactWriteQueues.current;const previous=writes.get(key)||Promise.resolve();
@@ -206,7 +242,7 @@ function App(){
   async function save(m){const ex=members.some(x=>x.id===m.id);
     const{data,error}=await(ex?sb.from('members').update({...toRow(m),updated_at:new Date().toISOString()}).eq('id',m.id):sb.from('members').insert(toRow(m))).select().single();
     if(error){setToast({text:'Could not save: '+(navigator.onLine?error.message:'no internet connection.')});return}
-    const nm=fromRow(data);setRaw(l=>ex?l.map(x=>x.id===nm.id?nm:x):[nm,...l.filter(x=>x.id!==nm.id)]);setEdit(null);setToast({text:(ex?'Updated ':'Added ')+nm.name+' in '+LBL(nm.ward)+'.'});go('ward',nm.ward)}
+    const nm=fromRow(data);setRaw(l=>ex?l.map(x=>x.id===nm.id?nm:x):[nm,...l.filter(x=>x.id!==nm.id)]);await logActivity(ex?'member_edit':'member_add');setEdit(null);setToast({text:(ex?'Updated ':'Added ')+nm.name+' in '+LBL(nm.ward)+'.'});go('ward',nm.ward)}
   const common={msgText:saved,onWa,onSms,onCall,onOpen:open};
   const card=(m,sw)=>html`<${MemberCard} key=${m.id} m=${m} showWard=${sw} contactStatus=${contactStatuses[m.id]} ...${common}/>`;
 
@@ -234,7 +270,7 @@ function App(){
     ${list.length?html`<div className="member-grid">${list.slice(0,lim).map(m=>card(m,scr==='all'))}</div>`:html`<div className="empty">${scr==='ward'&&!members.some(m=>m.ward===ward)?LBL(ward)+' has no records yet. Tap + to add the first member.':'No members found.'}</div>`}${list.length>lim&&html`<button className="btn" style=${{width:'100%'}} onClick=${()=>setLim(lim+150)}>Show more (${list.length-lim} left)</button>`}</div>`;
   else if(scr==='detail'&&cur)body=html`<${Detail} m=${cur} ...${common} contactStatus=${contactStatuses[cur.id]}/>`;
   else if(scr==='form')body=html`<${MemberForm} init=${edit||{ward:ward?ward:'',name:'',relType:'F',relName:'',house:'',street:'',phone:'',village:'Nalgonda'}} members=${members} onSave=${save} onCancel=${backToPrevious}/>`;
-  else body=html`<${Settings} members=${members} addMany=${addMany} onLogout=${logout}/>`;
+  else body=html`<${Settings} members=${members} addMany=${addMany} onLogout=${logout} userEmail=${session&&session.user.email||''} activityIssue=${activityIssue}/>`;
   const title=scr==='home'?'MLC Ward-wise List':scr==='ward'?LBL(ward):scr==='all'?'All Members':scr==='detail'?'Member Details':scr==='form'?(edit?'Edit Member':'Add Member'):'Settings';
   const items=scr==='home'?[['Settings',()=>go('settings')],['All Members',()=>go('all')]]:scr==='ward'?[['Add member here',()=>navigate('form',{selected:null,editRecord:null})]]:scr==='detail'&&cur?[['Edit',()=>navigate('form',{selected:cur.id,editRecord:cur})],['Delete',()=>{if(confirm('Delete '+cur.name+'?')){remove(cur.id).then(ok=>{if(ok)backToPrevious()})}}]]:[];
   const menuEl=menu&&items.length>0&&html`<div className="menu">${items.map(([l,f])=>html`<button key=${l} onClick=${()=>{setMenu(false);f()}}>${l}</button>`)}</div>`;

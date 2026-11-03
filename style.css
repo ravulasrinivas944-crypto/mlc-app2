@@ -72,11 +72,18 @@ table{width:100%;border-collapse:collapse;font-size:14px}td{padding:4px 6px;bord
 .login{min-height:100vh;display:grid;place-items:center;padding:20px;background:linear-gradient(#ffd6e9,#fff4f9)}
 .lcard{width:min(400px,100%);background:#fff;border:1px solid var(--line);border-radius:20px;padding:24px 20px;text-align:center;box-shadow:0 8px 24px rgba(230,0,115,.15)}
 .lcard .f{text-align:left}.lcard h2{margin:6px 0 4px;color:var(--p)}
+.activity-disclosure{text-align:left;margin:16px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:12px}
 .lbadge{width:64px;height:64px;border-radius:50%;background:var(--p);color:#fff;font-weight:800;display:grid;place-items:center;margin:0 auto}
 .err{color:#d11;font-size:14px;margin:6px 0}
 .sync{background:#fff0a8;color:#5a4a00;text-align:center;padding:6px 10px;font-size:13px}
 .member-grid{display:grid;grid-template-columns:1fr;gap:10px}
 .member-grid .mem{margin:0}
+.activity-heading{justify-content:space-between;margin-bottom:12px}.activity-heading>div{flex:1}
+.activity-table-wrap{overflow:auto;max-width:100%;margin:12px 0}
+.activity-table{min-width:720px}
+.activity-table th,.activity-table td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.activity-table th{color:var(--mut);font-weight:600;background:#fff8fb}
+.activity-recent{margin:14px 0}.activity-recent summary{cursor:pointer;color:var(--p);font-weight:600}
 @media(min-width:800px){
  body{background:#f8f2f6}
  .app{max-width:none;padding-bottom:0}
