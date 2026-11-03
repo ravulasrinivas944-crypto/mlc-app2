@@ -1,0 +1,16 @@
+@media (min-width:800px){
+  body{background:#f4f3f7}
+  .app{max-width:1680px;margin:0 auto;background:#f8f6f9}
+  header{margin-left:248px;padding:18px 36px;background:#fff;color:var(--text);border-bottom:1px solid var(--line);box-shadow:0 2px 8px rgba(42,26,34,.04)}
+  header button{color:var(--p)}
+  .app>.pad,.app>.sync{margin-left:248px}
+  .app>.pad{width:calc(100% - 248px);max-width:1432px;padding:32px 40px}
+  nav{width:248px;background:#fff;padding:28px 14px;border-right:1px solid var(--line)}
+  nav button{min-height:50px}
+  .member-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+  .home-app>.pad{grid-template-columns:minmax(0,1.3fr) minmax(320px,.85fr);gap:0 24px}
+  .home-app>.pad>.card:first-child{grid-column:1;grid-row:1 / span 2}
+  .home-app>.pad>.card:nth-child(2),.home-app>.pad>.sb{grid-column:2}
+  .home-app>.pad>.grid,.home-app>.pad>.search-results,.home-app>.pad>.empty{grid-column:1 / -1}
+  .card{box-shadow:0 4px 16px rgba(42,26,34,.035)}
+}
