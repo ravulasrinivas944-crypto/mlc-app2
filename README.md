@@ -8,7 +8,7 @@ On Android phones with both WhatsApp and WhatsApp Business installed, the WhatsA
 
 ### Persistent Android APK updates
 
-The APK workflow is prepared to sign release builds with a persistent key so future APKs can install as updates without uninstalling. Until all four GitHub Actions secrets below are configured, the APK build is intentionally skipped. Create the key once on a trusted Windows computer, outside this repository:
+The APK workflow signs release builds with a persistent key so future APKs can install as updates without uninstalling. Until all four GitHub Actions secrets below are configured, the APK build is intentionally skipped. Create the key once on a trusted Windows computer, outside this repository:
 
 ```powershell
 keytool -genkeypair -v -keystore "$HOME\mlc-release.keystore" -alias mlc-release -keyalg RSA -keysize 2048 -validity 10000

@@ -55,7 +55,7 @@ if 'signingConfigs {' not in g:
     signing = (
         f'{indent}signingConfigs {{\n'
         f'{indent}    release {{\n'
-        f'{indent}        storeFile file(System.getenv("ANDROID_KEYSTORE_PATH"))\n'
+        f'{indent}        storeFile file("mlc-release.keystore")\n'
         f'{indent}        storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")\n'
         f'{indent}        keyAlias System.getenv("ANDROID_KEY_ALIAS")\n'
         f'{indent}        keyPassword System.getenv("ANDROID_KEY_PASSWORD")\n'
