@@ -35,4 +35,42 @@ public class MainActivity extends BridgeActivity {{
 ''')
 tpl = pathlib.Path('native/WaSharePlugin.java.tpl').read_text().replace('__PKG__', pkg)
 (main.parent / 'WaSharePlugin.java').write_text(tpl)
+
+gradle = root.parent.parent / 'build.gradle'
+g = gradle.read_text()
+if 'ANDROID_VERSION_CODE' not in g:
+    g, version_count = re.subn(
+        r'(?m)^([ \t]*)versionCode\s+\d+\s*$',
+        r'\1versionCode (System.getenv("ANDROID_VERSION_CODE") ?: "1").toInteger()',
+        g,
+        count=1,
+    )
+    if version_count != 1:
+        raise RuntimeError('Android build.gradle has no versionCode to update')
+if 'signingConfigs {' not in g:
+    build_types = re.search(r'(?m)^([ \t]*)buildTypes\s*\{', g)
+    if not build_types:
+        raise RuntimeError('Android build.gradle has no buildTypes block')
+    indent = build_types.group(1)
+    signing = (
+        f'{indent}signingConfigs {{\n'
+        f'{indent}    release {{\n'
+        f'{indent}        storeFile file(System.getenv("ANDROID_KEYSTORE_PATH"))\n'
+        f'{indent}        storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")\n'
+        f'{indent}        keyAlias System.getenv("ANDROID_KEY_ALIAS")\n'
+        f'{indent}        keyPassword System.getenv("ANDROID_KEY_PASSWORD")\n'
+        f'{indent}    }}\n'
+        f'{indent}}}\n'
+    )
+    g = g[:build_types.start()] + signing + g[build_types.start():]
+
+build_types = re.search(r'(?m)^[ \t]*buildTypes\s*\{', g)
+release = re.search(r'(?m)^([ \t]*)release\s*\{', g[build_types.end():]) if build_types else None
+if not release:
+    raise RuntimeError('Android build.gradle has no release build type')
+release_start = build_types.end() + release.end()
+release_indent = release.group(1) + '    '
+if 'signingConfig signingConfigs.release' not in g[release_start:release_start + 160]:
+    g = g[:release_start] + f'\n{release_indent}signingConfig signingConfigs.release' + g[release_start:]
+gradle.write_text(g)
 print('Patched Android project, package', pkg)
