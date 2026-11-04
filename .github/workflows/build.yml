@@ -52,7 +52,15 @@ jobs:
           test -s "$ANDROID_KEYSTORE_PATH"
       - name: Validate signing key
         if: steps.signing.outputs.ready == 'true'
-        run: keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > /dev/null
+        run: |
+          if ! keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
+            echo "::error::Could not open the uploaded keystore. Re-copy ANDROID_KEYSTORE_BASE64 from the same local keystore file and confirm ANDROID_KEYSTORE_PASSWORD."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::The keystore password is accepted, but ANDROID_KEY_ALIAS was not found. Set it to the exact alias shown by keytool."
+            exit 1
+          fi
       - run: cd android && chmod +x gradlew && ./gradlew assembleRelease
         if: steps.signing.outputs.ready == 'true'
       - uses: actions/upload-artifact@v4
