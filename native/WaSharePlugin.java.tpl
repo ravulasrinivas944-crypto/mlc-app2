@@ -1,9 +1,9 @@
 package __PKG__;
 
-import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
 import android.net.Uri;
+import android.content.pm.PackageManager;
 import android.util.Base64;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.Plugin;
@@ -15,6 +15,15 @@ import java.io.FileOutputStream;
 
 @CapacitorPlugin(name = "WaShare")
 public class WaSharePlugin extends Plugin {
+    private boolean isInstalled(String packageName) {
+        try {
+            getContext().getPackageManager().getPackageInfo(packageName, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
     @PluginMethod
     public void send(PluginCall call) {
         String phone = call.getString("phone", "");
@@ -43,18 +52,24 @@ public class WaSharePlugin extends Plugin {
             i.putExtra(Intent.EXTRA_TEXT, text);
             i.putExtra("jid", phone + "@s.whatsapp.net");
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            String[] pkgs = { "com.whatsapp", "com.whatsapp.w4b" };
-            for (String p : pkgs) {
-                try {
-                    i.setPackage(p);
-                    getContext().startActivity(i);
-                    call.resolve();
-                    return;
-                } catch (ActivityNotFoundException e) {
-                    // try the next WhatsApp package
-                }
+            boolean regularInstalled = isInstalled("com.whatsapp");
+            boolean businessInstalled = isInstalled("com.whatsapp.w4b");
+            if (regularInstalled && businessInstalled) {
+                Intent regular = new Intent(i);
+                regular.setPackage("com.whatsapp");
+                Intent business = new Intent(i);
+                business.setPackage("com.whatsapp.w4b");
+                Intent chooser = Intent.createChooser(regular, "Choose WhatsApp app");
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { business });
+                getContext().startActivity(chooser);
+            } else if (regularInstalled || businessInstalled) {
+                i.setPackage(regularInstalled ? "com.whatsapp" : "com.whatsapp.w4b");
+                getContext().startActivity(i);
+            } else {
+                call.reject("WHATSAPP_NOT_INSTALLED");
+                return;
             }
-            call.reject("WHATSAPP_NOT_INSTALLED");
+            call.resolve();
         } catch (Exception e) {
             call.reject("FAILED: " + e.getMessage());
         }

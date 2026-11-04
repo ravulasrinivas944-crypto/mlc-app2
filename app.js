@@ -228,10 +228,14 @@ function App(){
   const notify=(m,note)=>setToast({text:fill(saved,m)||'(No common message saved. The chat will open without text.)',to:m.name,note});
   async function onWa(e,m){
     recordContact('whatsapp',m);
-    if(!photo){notify(m,'Opening WhatsApp. Review the message, then send it yourself.');return}
-    e.preventDefault();const text=fill(saved,m);const url=`https://wa.me/${waNum(m.phone)}?text=${encodeURIComponent(text)}`;
+    const text=fill(saved,m);const url=`https://wa.me/${waNum(m.phone)}?text=${encodeURIComponent(text)}`;
     const nat=window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()&&window.Capacitor.Plugins&&window.Capacitor.Plugins.WaShare;
-    if(nat){try{await nat.send({phone:waNum(m.phone),text,image:photo.split(',')[1],mime:'image/jpeg'});notify(m,'WhatsApp opened with the photo and message. Press Send yourself.');return}catch(x){if(String((x&&x.message)||x).includes('WHATSAPP_NOT_INSTALLED')){setToast({text:'WhatsApp is not installed on this phone.'});return}}}
+    if(nat){e.preventDefault();try{await nat.send({phone:waNum(m.phone),text,image:photo?photo.split(',')[1]:'',mime:'image/jpeg'});
+        notify(m,photo?'Choose WhatsApp or WhatsApp Business, review the photo and message, then send it yourself.':'Choose WhatsApp or WhatsApp Business, review the message, then send it yourself.');return}
+      catch(x){if(String((x&&x.message)||x).includes('WHATSAPP_NOT_INSTALLED')){setToast({text:'WhatsApp is not installed on this phone.'});return}
+        console.error('Could not open WhatsApp share target.',x);window.open(url,'_blank','noopener');
+        notify(m,'Could not open the WhatsApp app chooser. WhatsApp opened in your browser instead. Review the message, then send it yourself.');return}}
+    if(!photo){notify(m,'Opening WhatsApp. Review the message, then send it yourself.');return}
     try{const b=await(await fetch(photo)).blob();const f=new File([b],'photo.'+(b.type.split('/')[1]||'jpg'),{type:b.type});
       if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],text});notify(m,'Choose WhatsApp in the share sheet and pick the contact. Nothing is sent automatically.');return}}catch(x){}
     window.open(url,'_blank','noopener');notify(m,'The photo could not be attached from here. WhatsApp opened with the text only. Attach the photo yourself in the chat.')}
