@@ -38,14 +38,26 @@ tpl = pathlib.Path('native/WaSharePlugin.java.tpl').read_text().replace('__PKG__
 
 gradle = root.parent.parent / 'build.gradle'
 g = gradle.read_text()
-if 'ANDROID_VERSION_CODE' not in g:
+if 'def androidVersionCode =' not in g:
+    android_block = re.search(r'(?m)^android\s*\{', g)
+    if not android_block:
+        raise RuntimeError('Android build.gradle has no android block')
+    version_code = (
+        'def androidVersionCode = (System.getenv("ANDROID_VERSION_CODE") ?: "1").toInteger()\n\n'
+    )
+    g = g[:android_block.start()] + version_code + g[android_block.start():]
+if 'versionCode androidVersionCode' not in g:
+    g = g.replace(
+        'versionCode (System.getenv("ANDROID_VERSION_CODE") ?: "1").toInteger()',
+        'versionCode androidVersionCode',
+    )
     g, version_count = re.subn(
         r'(?m)^([ \t]*)versionCode\s+\d+\s*$',
-        r'\1versionCode (System.getenv("ANDROID_VERSION_CODE") ?: "1").toInteger()',
+        r'\1versionCode androidVersionCode',
         g,
         count=1,
     )
-    if version_count != 1:
+    if version_count != 1 and 'versionCode androidVersionCode' not in g:
         raise RuntimeError('Android build.gradle has no versionCode to update')
 if 'signingConfigs {' not in g:
     build_types = re.search(r'(?m)^([ \t]*)buildTypes\s*\{', g)
